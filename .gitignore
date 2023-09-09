@@ -1,0 +1,6 @@
+#log file 제외
+/logs
+
+/plugins
+
+.env
