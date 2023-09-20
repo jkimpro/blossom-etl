@@ -23,6 +23,11 @@
  
 FROM apache/airflow:2.7.1
 USER root
+
+# oracle client 옮기기
+COPY oracle.py .
+COPY instantclient_21_7/ /opt/oracle/instantclient_21_7
+
 # heimdal-dev 추가해야 permission 문제 안생김
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
@@ -33,9 +38,43 @@ RUN apt-get update \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/*
 
+#java 설치
+RUN sudo apt-get install -y --no-install-recommends default-jre default-jdk
+RUN java -version
+
+RUN sudo apt-get install wget
+RUN wget http://mirror.apache-kr.org/apache/hadoop/common/hadoop-2.10.1/hadoop-2.10.1.tar.gz
+RUN mkdir /home/hadoop
+RUN tar -xvzf hadoop-2.10.1.tar.gz -C /home/hadoop/
+RUN rm hadoop-2.10.1.tar.gz
+ENV PATH=$PATH:/usr/lib/jvm/java-11-openjdk-amd64/bin
+RUN echo "export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64" >> /home/hadoop/hadoop-2.10.1/etc/hadoop/hadoop-env.sh
+
+
+RUN sudo apt install -y libaio1
+RUN sudo apt install -y build-essential
+RUN gcc --version
+RUN sudo apt install -y libkrb5-dev
+RUN export ORACLE_HOME=/opt/oracle/instantclient_21_7; echo $ORACLE_HOME; export PATH=$ORACLE_HOME:$PATH;
+RUN sudo sh -c "echo /opt/oracle/instantclient_21_7 > /etc/ld.so.conf.d/oracle-instantclient.conf"
+RUN sudo ldconfig
+
+
 USER airflow
 
 COPY --chown=airflow:root ./dags/test_dag.py /opt/airflow/dags
+
+
+ENV HADOOP_HOME=/home/hadoop
+ENV HADOOP_USER_NAME=gpadmin
+ENV PATH=$PATH:/home/hadoop/hadoop-2.10.1/bin
+
+RUN hdfs dfs -ls
+RUN hadoop dfs -ls
+
+RUN pip install oracledb
+RUN pip install apache-airflow-providers-oracle[common.sql]
+RUN pip install snakebite-py3
 
 #requirements.txt 를 airflow container 안에 복사후 필요한 것들을 설치함
 # apt get 으로 kurb5-config 를 설치하여도 permission denied 에러가 발생함
@@ -58,6 +97,8 @@ RUN pip install apache-airflow-providers-odbc
 RUN pip install apache-airflow-providers-microsoft-mssql
 RUN pip install apache-airflow-providers-cncf-kubernetes
 RUN pip install git-sync
+
+RUN mv oracle.py ~/.local/lib/python3.7/site-packages/airflow/providers/oracle/hooks/oracle.py
 
 ENV AIRFLOW__CORE__LOAD_EXAMPLES=True
 ENV AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=my_conn_string
